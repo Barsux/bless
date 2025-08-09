@@ -1,10 +1,11 @@
 #requires -version 5.0
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$ErrorActionPreference = 'Stop'  # Превращаем любые ошибки в исключения
 
 # === Start logging to ~/setup.log ===
 $userHome = [Environment]::GetFolderPath("UserProfile")
 $logFile = Join-Path $userHome "setup.log"
-Start-Transcript -Path $logFile -Append | Out-Null
+try { Start-Transcript -Path $logFile -Append | Out-Null } catch {}
 
 function Write-Log {
     param([string]$msg)
@@ -14,8 +15,7 @@ function Write-Log {
 function Ensure-Admin {
     Write-Log "Checking for administrator privileges..."
     if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
-        Write-Error "This script must be run as Administrator."
-        exit 1
+        throw "This script must be run as Administrator."
     }
 }
 
@@ -27,8 +27,7 @@ function Install-Chocolatey {
         Invoke-Expression (Invoke-RestMethod $chocoScript)
         Write-Log "Chocolatey was installed successfully."
     } catch {
-        Write-Error "Failed to install Chocolatey: $_"
-        exit 1
+        throw "Failed to install Chocolatey: $($_.Exception.Message)"
     }
 }
 
@@ -68,8 +67,7 @@ function Ensure-Python {
     if ($?) {
         Write-Log "Python 3.11 installed."
     } else {
-        Write-Error "Failed to install Python."
-        exit 1
+        throw "Failed to install Python."
     }
 }
 
@@ -82,8 +80,7 @@ function Ensure-7zip {
         if ($?) {
             Write-Log "7-Zip installed."
         } else {
-            Write-Error "Failed to install 7-Zip."
-            exit 1
+            throw "Failed to install 7-Zip."
         }
     }
 }
@@ -97,8 +94,7 @@ function Ensure-Git {
         if ($?) {
             Write-Log "Git installed."
         } else {
-            Write-Error "Failed to install Git."
-            exit 1
+            throw "Failed to install Git."
         }
     }
 }
@@ -136,8 +132,7 @@ function Setup-VenvAndInstallRequirements {
 
     $activateScript = Join-Path $venvPath "Scripts\Activate.ps1"
     if (-not (Test-Path $activateScript)) {
-        Write-Error "Could not find Activate.ps1 inside venv!"
-        exit 1
+        throw "Could not find Activate.ps1 inside venv!"
     }
 
     Write-Log "Activating virtual environment..."
@@ -148,8 +143,7 @@ function Setup-VenvAndInstallRequirements {
         & python -m pip install --upgrade pip *> $null
         & python -m pip install -r $requirementsPath *> $null
     } else {
-        Write-Error "requirements.txt not found at $requirementsPath"
-        exit 1
+        throw "requirements.txt not found at $requirementsPath"
     }
 }
 
@@ -166,8 +160,7 @@ function Download-MihomoZip {
     }
 
     if (-not (Test-Path $zipPath) -or ((Get-Item $zipPath).Length -lt 1024)) {
-        Write-Error "mihomo.zip is missing or too small. Validation failed."
-        exit 1
+        throw "mihomo.zip is missing or too small. Validation failed."
     } else {
         Write-Log "mihomo.zip downloaded and validated."
     }
@@ -180,8 +173,7 @@ function Unpack-Mihomo {
     $targetExe = Join-Path $blessPath "mihomo.exe"
 
     if (-not (Test-Path $zipPath)) {
-        Write-Error "mihomo.zip not found at $zipPath"
-        exit 1
+        throw "mihomo.zip not found at $zipPath"
     }
 
     Write-Log "Unpacking mihomo.zip into $blessPath..."
@@ -192,8 +184,7 @@ function Unpack-Mihomo {
         Remove-Item $zipPath -Force
         Write-Log "mihomo.exe unpacked and renamed from $($originalExe)"
     } else {
-        Write-Error "Expected file 'mihomo-windows-amd64.exe' not found after unpacking."
-        exit 1
+        throw "Expected file 'mihomo-windows-amd64.exe' not found after unpacking."
     }
 }
 
@@ -203,22 +194,18 @@ function Copy-WintunDll {
     $targetDll = Join-Path $blessPath "wintun.dll"
 
     if (-not (Test-Path $sourceDll)) {
-        Write-Error "Source DLL not found: $sourceDll"
-        exit 1
+        throw "Source DLL not found: $sourceDll"
     }
 
     Copy-Item -Path $sourceDll -Destination $targetDll -Force
     Write-Log "Copied wintun.dll from misc/tte.dll"
 
     if (-not (Test-Path $targetDll) -or ((Get-Item $targetDll).Length -lt 100 * 1024)) {
-        Write-Error "wintun.dll copy failed or file too small. Validation failed."
-        exit 1
+        throw "wintun.dll copy failed or file too small. Validation failed."
     } else {
         Write-Log "wintun.dll successfully copied and validated."
     }
 }
-
-
 
 function Create-BlessKeyAndPrompt {
     $blessPath = Join-Path $userHome "bless"
@@ -245,13 +232,11 @@ function Run-VlessParser {
     $outputConfig = Join-Path $blessPath "config.yaml"
 
     if (-not (Test-Path $parserScript)) {
-        Write-Error "vless_parser.py not found at $parserScript"
-        exit 1
+        throw "vless_parser.py not found at $parserScript"
     }
 
     if (-not (Test-Path $keyFile)) {
-        Write-Error "bless.key not found at $keyFile"
-        exit 1
+        throw "bless.key not found at $keyFile"
     }
 
     Write-Log "Running vless_parser.py..."
@@ -259,8 +244,7 @@ function Run-VlessParser {
     $exitCode = $LASTEXITCODE
 
     if ($exitCode -ne 0) {
-        Write-Error "vless_parser.py failed with exit code $exitCode"
-        exit 1
+        throw "vless_parser.py failed with exit code $exitCode"
     } else {
         Write-Log "vless_parser.py completed successfully. Output: $outputConfig"
     }
@@ -274,8 +258,7 @@ function Copy-VlgTemplate {
         Copy-Item -Path $src -Destination $dst -Force
         Write-Log "vlg_config.json copied to dat2rules"
     } else {
-        Write-Error "Template vlg_config.json not found at $src"
-        exit 1
+        throw "Template vlg_config.json not found at $src"
     }
 }
 
@@ -284,8 +267,7 @@ function Update-RulesPathInVlgConfig {
     Write-Log "Updating rules_filepath in vlg_config.json..."
     & python $script
     if ($LASTEXITCODE -ne 0) {
-        Write-Error "Failed to update vlg_config.json"
-        exit 1
+        throw "Failed to update vlg_config.json"
     }
 }
 
@@ -349,28 +331,38 @@ function Offer-Autostart {
     }
 }
 
-
-
 # ---- MAIN ----
-
-Ensure-Admin
-Write-Log "Starting environment setup..."
-Ensure-Chocolatey
-Ensure-Python
-Ensure-7zip
-Ensure-Git
-Clone-Repos
-Setup-VenvAndInstallRequirements
-Download-MihomoZip
-Unpack-Mihomo
-Copy-WintunDll
-Create-BlessKeyAndPrompt
-Run-VlessParser
-Copy-VlgTemplate
-Update-RulesPathInVlgConfig
-Create-LauncherScript
-Offer-Autostart
-Write-Log "Setup complete."
-
-# === Stop logging ===
-Stop-Transcript | Out-Null
+$hadError = $false
+try {
+    Ensure-Admin
+    Write-Log "Starting environment setup..."
+    Ensure-Chocolatey
+    Ensure-Python
+    Ensure-7zip
+    Ensure-Git
+    Clone-Repos
+    Setup-VenvAndInstallRequirements
+    Download-MihomoZip
+    Unpack-Mihomo
+    Copy-WintunDll
+    Create-BlessKeyAndPrompt
+    Run-VlessParser
+    Copy-VlgTemplate
+    Update-RulesPathInVlgConfig
+    Create-LauncherScript
+    Offer-Autostart
+    Write-Log "Setup complete."
+}
+catch {
+    $hadError = $true
+    Write-Host "`nERROR: $($_.Exception.Message)" -ForegroundColor Red
+}
+finally {
+    try { Stop-Transcript | Out-Null } catch {}
+    if ($hadError) {
+        Write-Host "`nSetup finished with errors. See log: $logFile" -ForegroundColor Red
+    } else {
+        Write-Host "`nSetup completed successfully. Log: $logFile" -ForegroundColor Green
+    }
+    Read-Host "Press Enter to exit"
+}
