@@ -63,7 +63,7 @@ function Ensure-Python {
         Write-Log "Python not found. Installing Python 3.11..."
     }
 
-    choco install python3 --version=3.11.7 -y --no-progress
+    choco install python311 -y --no-progress
     if ($?) {
         Write-Log "Python 3.11 installed."
     } else {
