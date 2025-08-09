@@ -1,0 +1,75 @@
+{
+    "dat_urls": [
+        {
+            "name": "v2fly",
+            "url": "https://raw.githubusercontent.com/v2fly/domain-list-community/release/dlc.dat"
+        },
+		{
+			"name": "zkeen_geosite",
+			"url": "https://github.com/jameszeroX/zkeen-domains/releases/latest/download/zkeen.dat"
+		}
+    ],
+    "dat_files_directory":"",
+    "rules_filepath": "Z:\\Projects\\dat2rules\\rules.yaml",
+    "rules": [
+		{
+			"type": "DST-PORT",
+			"values": [
+				"135-139"
+			],
+			"outbound": "REJECT"
+		},
+		{
+			"type": "DST-PORT",
+			"values": [
+				"50000-50030"
+			],
+			"outbound": "VLESS"
+		},
+		{
+			"type":"DOMAIN-SUFFIX",
+			"values": [
+				"appcenter.ms"
+			],
+			"outbound": "REJECT"
+		},
+        {
+            "type": "DOMAIN-SUFFIX",
+            "values": [
+                "2ip.ru",
+				"2ip.io",
+				"rutracker.org",
+				"flibusta.is",
+				"onlinesim.io",
+				"mobatek.net",
+				"parsecgaming.com",
+				"pornolab.net",
+				"chub.ai",
+				"charhub.io",
+				"aliexpress.com",
+				"stripe.com",
+				"catbox.moe",
+				"mos-gorsud.co",
+				"deepstatemap.live"
+            ],
+            "outbound": "VLESS"
+        },
+        {
+            "type": "DAT",
+            "values": [
+                "v2fly:youtube",
+				"v2fly:speedtest",
+				"v2fly:github",
+				"v2fly:pornhub",
+				"v2fly:discord",
+				"v2fly:category-porn",
+				"v2fly:spotify",
+				"v2fly:openai",
+				"v2fly:tiktok",
+				"zkeen_geosite:domains",
+				"zkeen_geosite:other"
+            ],
+            "outbound": "VLESS"
+        }
+    ]
+}

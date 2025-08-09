@@ -1,0 +1,7 @@
+*.bat
+/wintun.dll
+*.key
+/venv
+/dat2rules
+*.exe
+/config.yaml
