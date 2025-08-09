@@ -1,6 +1,9 @@
 #requires -version 5.0
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-$ErrorActionPreference = 'Stop'  # Превращаем любые ошибки в исключения
+$ErrorActionPreference = 'Stop'  # Превращаем ошибки в исключения
+
+# Локальный Bypass на время работы скрипта
+try { Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force } catch {}
 
 # === Start logging to ~/setup.log ===
 $userHome = [Environment]::GetFolderPath("UserProfile")
@@ -40,35 +43,91 @@ function Ensure-Chocolatey {
 }
 
 function Ensure-Python {
+    Write-Log "Checking Python..."
+    $targetMajor = 3
+    $targetMinorMin = 11
+    $needInstall = $true
+
     $pythonCmd = Get-Command python -ErrorAction SilentlyContinue
     if ($pythonCmd) {
         try {
-            $versionOutput = & python --version 2>&1
-            if ($versionOutput -match "Python (\d+)\.(\d+)\.(\d+)") {
-                $major = [int]$matches[1]
-                $minor = [int]$matches[2]
-                if ($major -eq 3 -and $minor -ge 9) {
-                    Write-Log "Python $major.$minor already installed."
-                    return
+            $v = & python --version 2>&1
+            if ($v -match "Python (\d+)\.(\d+)\.(\d+)") {
+                $maj = [int]$matches[1]; $min = [int]$matches[2]
+                if ($maj -eq $targetMajor -and $min -ge $targetMinorMin) {
+                    Write-Log "Python $maj.$min already installed."
+                    $needInstall = $false
                 } else {
-                    Write-Log "Installed Python is too old ($major.$minor). Installing Python 3.11..."
+                    Write-Log "Python $maj.$min is too old. Need $targetMajor.$targetMinorMin+"
                 }
             } else {
-                Write-Log "Couldn't parse Python version. Reinstalling..."
+                Write-Log "Cannot parse Python version. Will reinstall."
             }
         } catch {
-            Write-Log "Error while checking Python version. Reinstalling..."
+            Write-Log "Version check failed. Will reinstall."
         }
     } else {
-        Write-Log "Python not found. Installing Python 3.11..."
+        Write-Log "Python not found. Will install $targetMajor.$targetMinorMin+"
     }
 
-    choco install python311 -y --no-progress
-    if ($?) {
-        Write-Log "Python 3.11 installed."
+    if (-not $needInstall) { return }
+
+    # 1) WinGet
+    $winget = Get-Command winget -ErrorAction SilentlyContinue
+    if ($winget) {
+        Write-Log "Installing Python via WinGet (Python.Python.3.11)..."
+        $p = Start-Process -FilePath "winget" -ArgumentList @(
+            "install","-e","--id","Python.Python.3.11",
+            "--scope","machine",
+            "--accept-package-agreements","--accept-source-agreements"
+        ) -Wait -PassThru -NoNewWindow
+        if ($p.ExitCode -eq 0) {
+            Write-Log "Python installed via WinGet."
+            return
+        } else {
+            Write-Log "WinGet install failed with code $($p.ExitCode). Fallback to Chocolatey..."
+        }
     } else {
-        throw "Failed to install Python."
+        Write-Log "WinGet not found. Fallback to Chocolatey..."
     }
+
+    # 2) Chocolatey — ставим не 'python3', а конкретную ветку 'python311'
+    if (Get-Command choco -ErrorAction SilentlyContinue) {
+        Write-Log "Installing python311 via Chocolatey..."
+        choco install python311 -y --no-progress
+        if ($LASTEXITCODE -eq 0 -or $?) {
+            Write-Log "Python installed via Chocolatey."
+            return
+        } else {
+            Write-Log "Chocolatey install failed. Fallback to official installer..."
+        }
+    }
+
+    # 3) Официальный инсталлер (тихо)
+    $ver = "3.11.9"
+    $url = "https://www.python.org/ftp/python/$ver/python-$ver-amd64.exe"
+    $dst = Join-Path $env:TEMP "python-$ver-amd64.exe"
+    Write-Log "Downloading official Python installer $url ..."
+    Invoke-WebRequest -Uri $url -OutFile $dst
+
+    # Проверка подписи (не блокируем установку при Warning)
+    $sig = Get-AuthenticodeSignature -FilePath $dst
+    if ($sig.Status -ne 'Valid') {
+        Write-Log "Warning: installer signature status = $($sig.Status). Continuing..."
+    }
+
+    $args = "/quiet InstallAllUsers=1 PrependPath=1 Include_launcher=0"
+    $proc = Start-Process -FilePath $dst -ArgumentList $args -Wait -PassThru
+    if ($proc.ExitCode -ne 0) {
+        throw "Official installer failed with exit code $($proc.ExitCode)."
+    }
+
+    # Обновим PATH текущей сессии
+    $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" +
+                [System.Environment]::GetEnvironmentVariable("Path","User")
+
+    $v2 = & python --version 2>&1
+    Write-Log "Python installed. Detected: $v2"
 }
 
 function Ensure-7zip {
